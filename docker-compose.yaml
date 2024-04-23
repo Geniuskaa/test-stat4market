@@ -1,0 +1,44 @@
+version: '3.2'
+services:
+  server:
+    build:
+        context: .
+        dockerfile: Dockerfile
+    container_name: app
+    environment:
+      TYPE: 'stg'
+    volumes:
+      - ./configs/stg_config.yaml:/configs/config.yaml
+#    extra_hosts:
+#      - host.docker.internal:host-gateway
+    ports:
+      - "9900:9900"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  db:
+    image: clickhouse/clickhouse-server:22.8.16.32
+    container_name: click
+    hostname: click_db
+    environment:
+      - CLICKHOUSE_DB=test
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=admin
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+  migrations:
+    image: ghcr.io/kukymbr/goose-docker:3.19.2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - GOOSE_DRIVER=clickhouse
+      - GOOSE_DBSTRING=tcp://admin:admin@click_db:9000/test
+    volumes:
+      - ./migrations:/migrations
